@@ -212,6 +212,21 @@ def clean_image(components, components_min_x, components_max_x, components_min_y
         mami = (image[components_max_x[i]+1][components_min_y[i]] + image[components_max_x[i]][components_min_y[i]-1])/2
         mama = (image[components_max_x[i]+1][components_min_y[i]] + image[components_max_x[i]][components_max_y[i]+1])/2
 
+        mimi += (image[components_min_x[i]-2][components_min_y[i]] + image[components_min_x[i]][components_min_y[i]-2])/2
+        mima += (image[components_min_x[i]-2][components_max_y[i]] + image[components_min_x[i]][components_max_y[i]+2])/2
+        mami += (image[components_max_x[i]+2][components_min_y[i]] + image[components_max_x[i]][components_min_y[i]-2])/2
+        mama += (image[components_max_x[i]+2][components_min_y[i]] + image[components_max_x[i]][components_max_y[i]+2])/2
+
+        mimi += (image[components_min_x[i]-3][components_min_y[i]] + image[components_min_x[i]][components_min_y[i]-3])/2
+        mima += (image[components_min_x[i]-3][components_max_y[i]] + image[components_min_x[i]][components_max_y[i]+3])/2
+        mami += (image[components_max_x[i]+3][components_min_y[i]] + image[components_max_x[i]][components_min_y[i]-3])/2
+        mama += (image[components_max_x[i]+3][components_min_y[i]] + image[components_max_x[i]][components_max_y[i]+3])/2
+
+        mimi = mimi / 3
+        mima = mima / 3
+        mami = mami / 3
+        mama = mama / 3
+
         for j in range(0, len(components[i])):
             x = components[i][j][0]
             y = components[i][j][1]
@@ -221,6 +236,7 @@ def clean_image(components, components_min_x, components_max_x, components_min_y
             prop3 = 1 - ((y-components_max_y[i]) / dist_y)
             prop4 = 1 - prop1
 
+            # TODO : there is a problem here, I use corner color and not corner proportion, need to fix this !
             col = (mimi * prop1 + mami * prop2 + mima * prop3 + mama * prop4) / 2
 
             image[x][y] = col
