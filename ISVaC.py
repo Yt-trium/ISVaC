@@ -12,9 +12,8 @@ import numpy as np
 from numba import jit
 
 # User parameters
-user_threshold = 750
-user_dilatation = 4
-
+user_threshold = 1000
+user_dilatation = 8
 
 if not os.path.exists("./masks_" + str(user_threshold) + "_" + str(user_dilatation)):
     os.mkdir("./masks_" + str(user_threshold) + "_" + str(user_dilatation))
@@ -121,6 +120,11 @@ for cpt in range(0, user_dilatation):
 print("Write the dirt mask")
 imageio.imwrite(os.path.join("./results_" + str(user_threshold) + "_" + str(user_dilatation), "MASK.JPG"), (mask*255).astype("uint8"))
 
+"""
+# for the recursive version of expand_components
+import sys
+sys.setrecursionlimit(5000)
+
 
 def expand_components(local_mask, component, i, j):
     if local_mask[i + 1][j]:
@@ -141,6 +145,33 @@ def expand_components(local_mask, component, i, j):
         local_mask, component = expand_components(local_mask, component, i, j - 1)
 
     return local_mask, component
+"""
+
+
+def expand_components_iterative(local_mask, component, i, j):
+    todo = [(i, j)]
+
+    while len(todo) > 0:
+        i, j = todo.pop()
+
+        if local_mask[i + 1][j]:
+            local_mask[i + 1][j] = False
+            component.append((i + 1, j))
+            todo.append((i + 1, j))
+        if local_mask[i - 1][j]:
+            local_mask[i - 1][j] = False
+            component.append((i - 1, j))
+            todo.append((i - 1, j))
+        if local_mask[i][j + 1]:
+            local_mask[i][j + 1] = False
+            component.append((i, j + 1))
+            todo.append((i, j + 1))
+        if local_mask[i][j - 1]:
+            local_mask[i][j - 1] = False
+            component.append((i, j - 1))
+            todo.append((i, j - 1))
+
+    return local_mask, component
 
 
 def get_components(mask):
@@ -159,7 +190,7 @@ def get_components(mask):
             if local_mask[i][j]:
                 local_mask[i][j] = False
                 component = [(i, j)]
-                local_mask, component = expand_components(mask, component, i, j)
+                local_mask, component = expand_components_iterative(mask, component, i, j)
 
                 max_x = 0
                 max_y = 0
@@ -204,40 +235,44 @@ def put_red(components, input_image):
 def clean_image(components, components_min_x, components_max_x, components_min_y, components_max_y, input_image):
     image = np.copy(input_image)
 
+    # color reconstruction
     for i in range(0, len(components)):
-        dist_x = components_max_x[i] - components_min_x[i]
-        dist_y = components_max_y[i] - components_min_y[i]
-        mimi = (image[components_min_x[i]-1][components_min_y[i]] + image[components_min_x[i]][components_min_y[i]-1])/2
-        mima = (image[components_min_x[i]-1][components_max_y[i]] + image[components_min_x[i]][components_max_y[i]+1])/2
-        mami = (image[components_max_x[i]+1][components_min_y[i]] + image[components_max_x[i]][components_min_y[i]-1])/2
-        mama = (image[components_max_x[i]+1][components_min_y[i]] + image[components_max_x[i]][components_max_y[i]+1])/2
+        minx = components_min_x[i]
+        maxx = components_max_x[i]
+        miny = components_min_y[i]
+        maxy = components_max_y[i]
 
-        mimi += (image[components_min_x[i]-2][components_min_y[i]] + image[components_min_x[i]][components_min_y[i]-2])/2
-        mima += (image[components_min_x[i]-2][components_max_y[i]] + image[components_min_x[i]][components_max_y[i]+2])/2
-        mami += (image[components_max_x[i]+2][components_min_y[i]] + image[components_max_x[i]][components_min_y[i]-2])/2
-        mama += (image[components_max_x[i]+2][components_min_y[i]] + image[components_max_x[i]][components_max_y[i]+2])/2
+        dist_x = maxx - minx
+        dist_y = maxy - miny
 
-        mimi += (image[components_min_x[i]-3][components_min_y[i]] + image[components_min_x[i]][components_min_y[i]-3])/2
-        mima += (image[components_min_x[i]-3][components_max_y[i]] + image[components_min_x[i]][components_max_y[i]+3])/2
-        mami += (image[components_max_x[i]+3][components_min_y[i]] + image[components_max_x[i]][components_min_y[i]-3])/2
-        mama += (image[components_max_x[i]+3][components_min_y[i]] + image[components_max_x[i]][components_max_y[i]+3])/2
+        col_left    = image[minx-1][miny + round(dist_y/2)]
+        col_right   = image[maxx+1][miny + round(dist_y/2)]
+        col_down    = image[minx + round(dist_x/2)][miny-1]
+        col_top     = image[minx + round(dist_x/2)][miny+1]
 
-        mimi = mimi / 3
-        mima = mima / 3
-        mami = mami / 3
-        mama = mama / 3
+        col_down_left   = image[minx-1][miny-1]
+        col_top_left    = image[minx-1][maxy+1]
+        col_down_right  = image[maxx+1][miny-1]
+        col_top_right   = image[maxx+1][maxy+1]
 
         for j in range(0, len(components[i])):
             x = components[i][j][0]
             y = components[i][j][1]
 
-            prop1 = 1 - ((x-components_max_x[i]) / dist_x)
-            prop2 = 1 - prop1
-            prop3 = 1 - ((y-components_max_y[i]) / dist_y)
-            prop4 = 1 - prop1
+            prop_left  = (maxx - x) / dist_x
+            prop_right = 1 - prop_left
+            prop_down  = (maxy - y) / dist_y
+            prop_top   = 1 - prop_down
 
-            # TODO : there is a problem here, I use corner color and not corner proportion, need to fix this !
-            col = (mimi * prop1 + mami * prop2 + mima * prop3 + mama * prop4) / 2
+            prop_down_left  = (prop_down + prop_left) / 4
+            prop_top_left   = (prop_top + prop_left) / 4
+            prop_down_right = (prop_down + prop_right) / 4
+            prop_top_right  = (prop_top + prop_right) / 4
+
+            col = ((prop_left * col_left) + (prop_right * col_right) + (prop_down * col_down) + (prop_top * col_top)) / 2
+            col += (prop_down_left * col_down_left) + (prop_top_left * col_top_left) +\
+                   (prop_down_right * col_down_right) + (prop_top_right * col_top_right)
+            col /= 2
 
             image[x][y] = col
 
